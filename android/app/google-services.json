@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "808354604817",
+    "project_id": "skyroster-1103f",
+    "storage_bucket": "skyroster-1103f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:808354604817:android:3a905f6561430a0b164eb0",
+        "android_client_info": {
+          "package_name": "com.example.air_line_app_1"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA0QoVMUdq2NAHGvpmHHHbUO_hRxye-Crs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
