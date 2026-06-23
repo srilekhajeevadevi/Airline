@@ -35,11 +35,11 @@ jobs:
     - name: Setup Node.js (required for Appium)
       uses: actions/setup-node@v3
       with:
-        node-version: '18'
+        node-version: '20'
 
     - name: Install Appium and Web Drivers
       run: |
-        npm install -g appium
+        npm install -g appium@next
         appium driver install uiautomator2
         echo "Appium server and UiAutomator2 driver installed successfully."
 
