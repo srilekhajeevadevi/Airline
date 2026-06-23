@@ -81,7 +81,18 @@ class SkyRosterApp extends StatelessWidget {
           prefixIconColor: const Color(0xFF5C2E91),
         ),
       ),
-      home: const LoginPage(),
+      home: StreamBuilder(
+        stream: FirebaseAuth.instance.authStateChanges(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          }
+          if (snapshot.hasData && snapshot.data != null) {
+            return const DashboardPage();
+          }
+          return const LoginPage();
+        },
+      ),
     );
   }
 }
@@ -181,27 +192,27 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ),
                   const SizedBox(height: 15),
-                  DropdownButtonFormField<String>(
-                    initialValue: selectedRole,
-                    decoration: const InputDecoration(
-                      labelText: 'Role',
-                      prefixIcon: Icon(Icons.work),
-                    ),
-                    items: const [
-                      DropdownMenuItem(value: 'Pilot', child: Text('Pilot')),
-                      DropdownMenuItem(value: 'Cabin Crew', child: Text('Cabin Crew')),
-                      DropdownMenuItem(value: 'Flight Engineer', child: Text('Flight Engineer')),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) {
-                        setState(() {
-                          selectedRole = value;
-                        });
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 15),
                 ],
+                DropdownButtonFormField<String>(
+                  initialValue: selectedRole,
+                  decoration: const InputDecoration(
+                    labelText: 'Role',
+                    prefixIcon: Icon(Icons.work),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'Pilot', child: Text('Pilot')),
+                    DropdownMenuItem(value: 'Cabin Crew', child: Text('Cabin Crew')),
+                    DropdownMenuItem(value: 'Flight Engineer', child: Text('Flight Engineer')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() {
+                        selectedRole = value;
+                      });
+                    }
+                  },
+                ),
+                const SizedBox(height: 15),
                 TextField(
                   controller: emailController,
                   decoration: const InputDecoration(
@@ -230,10 +241,20 @@ class _LoginPageState extends State<LoginPage> {
                       final navigator = Navigator.of(context);
                       final messenger = ScaffoldMessenger.of(context);
 
-                      if (email.isEmpty || password.isEmpty || (isSignUp && name.isEmpty)) {
-                        messenger.showSnackBar(
-                          const SnackBar(content: Text('Please fill all fields')),
-                        );
+                      if (email.isEmpty) {
+                        messenger.showSnackBar(const SnackBar(content: Text('Please enter email')));
+                        return;
+                      }
+                      if (password.isEmpty) {
+                        messenger.showSnackBar(const SnackBar(content: Text('Please enter password')));
+                        return;
+                      }
+                      if (isSignUp && name.isEmpty) {
+                        messenger.showSnackBar(const SnackBar(content: Text('Please enter full name')));
+                        return;
+                      }
+                      if (!email.contains('@') || !email.contains('.')) {
+                        messenger.showSnackBar(const SnackBar(content: Text('Please enter a valid email')));
                         return;
                       }
 
@@ -463,16 +484,26 @@ class FlightSchedulePage extends StatelessWidget {
               final data = flightDocs[index].data() as Map<String, dynamic>;
 
               return Card(
-                child: ListTile(
+                child: ExpansionTile(
                   leading: const Icon(
                     Icons.flight_takeoff,
                     color: Colors.deepPurple,
                   ),
                   title: Text(data['flightNo'] ?? 'No Flight Number'),
-                  subtitle: Text(
-                    '${data['route'] ?? 'No Route'}\nTime: ${data['time'] ?? 'No Time'}',
-                  ),
-                  trailing: Text(data['status'] ?? 'No Status'),
+                  subtitle: Text(data['status'] ?? 'No Status'),
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Route: ${data['route'] ?? 'No Route'}'),
+                          const SizedBox(height: 8),
+                          Text('Time: ${data['time'] ?? 'No Time'}'),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               );
             },
@@ -550,8 +581,11 @@ class LeaveRequestPage extends StatefulWidget {
 
 class _LeaveRequestPageState extends State<LeaveRequestPage> {
   final nameController = TextEditingController();
-  final dateController = TextEditingController();
+  final startDateController = TextEditingController();
+  final endDateController = TextEditingController();
   final reasonController = TextEditingController();
+  DateTime? startDate;
+  DateTime? endDate;
   bool isLoading = true;
 
   @override
@@ -571,15 +605,14 @@ class _LeaveRequestPageState extends State<LeaveRequestPage> {
         nameController.text = user.email ?? '';
       }
     }
-    setState(() {
-      isLoading = false;
-    });
+    setState(() { isLoading = false; });
   }
 
   @override
   void dispose() {
     nameController.dispose();
-    dateController.dispose();
+    startDateController.dispose();
+    endDateController.dispose();
     reasonController.dispose();
     super.dispose();
   }
@@ -588,21 +621,13 @@ class _LeaveRequestPageState extends State<LeaveRequestPage> {
   Widget build(BuildContext context) {
     if (isLoading) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text('Leave Request'),
-          backgroundColor: Colors.deepPurple,
-          foregroundColor: Colors.white,
-        ),
+        appBar: AppBar(title: const Text('Leave Request'), backgroundColor: Colors.deepPurple, foregroundColor: Colors.white),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Leave Request'),
-        backgroundColor: Colors.deepPurple,
-        foregroundColor: Colors.white,
-      ),
+      appBar: AppBar(title: const Text('Leave Request'), backgroundColor: Colors.deepPurple, foregroundColor: Colors.white),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: SingleChildScrollView(
@@ -610,72 +635,90 @@ class _LeaveRequestPageState extends State<LeaveRequestPage> {
             children: [
               TextField(
                 controller: nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Crew Name',
-                  prefixIcon: Icon(Icons.person),
-                  border: OutlineInputBorder(),
-                ),
+                decoration: const InputDecoration(labelText: 'Crew Name', prefixIcon: Icon(Icons.person), border: OutlineInputBorder()),
               ),
               const SizedBox(height: 15),
               TextField(
-                controller: dateController,
-                decoration: const InputDecoration(
-                  labelText: 'Leave Date',
-                  prefixIcon: Icon(Icons.calendar_month),
-                  border: OutlineInputBorder(),
-                  hintText: 'YYYY-MM-DD or details',
-                ),
+                controller: startDateController,
+                readOnly: true,
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: DateTime.now(),
+                    firstDate: DateTime.now(),
+                    lastDate: DateTime(2100),
+                  );
+                  if (picked != null) {
+                    setState(() {
+                      startDate = picked;
+                      startDateController.text = picked.toString().split(' ')[0];
+                    });
+                  }
+                },
+                decoration: const InputDecoration(labelText: 'Start Date', prefixIcon: Icon(Icons.calendar_today), border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 15),
+              TextField(
+                controller: endDateController,
+                readOnly: true,
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: startDate ?? DateTime.now(),
+                    firstDate: startDate ?? DateTime.now(),
+                    lastDate: DateTime(2100),
+                  );
+                  if (picked != null) {
+                    setState(() {
+                      endDate = picked;
+                      endDateController.text = picked.toString().split(' ')[0];
+                    });
+                  }
+                },
+                decoration: const InputDecoration(labelText: 'End Date', prefixIcon: Icon(Icons.calendar_month), border: OutlineInputBorder()),
               ),
               const SizedBox(height: 15),
               TextField(
                 controller: reasonController,
                 maxLines: 3,
-                decoration: const InputDecoration(
-                  labelText: 'Reason',
-                  prefixIcon: Icon(Icons.edit_note),
-                  border: OutlineInputBorder(),
-                ),
+                decoration: const InputDecoration(labelText: 'Reason', prefixIcon: Icon(Icons.edit_note), border: OutlineInputBorder()),
               ),
               const SizedBox(height: 20),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.deepPurple,
-                  foregroundColor: Colors.white,
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple, foregroundColor: Colors.white),
+                  onPressed: () async {
+                    final name = nameController.text.trim();
+                    final reason = reasonController.text.trim();
+                    final messenger = ScaffoldMessenger.of(context);
+
+                    if (name.isEmpty || startDate == null || endDate == null || reason.isEmpty) {
+                      messenger.showSnackBar(const SnackBar(content: Text('Please fill all fields'), backgroundColor: Colors.red));
+                      return;
+                    }
+                    if (!endDate!.isAfter(startDate!)) {
+                      messenger.showSnackBar(const SnackBar(content: Text('End Date must be after Start Date'), backgroundColor: Colors.orange));
+                      return;
+                    }
+
+                    await FirebaseFirestore.instance.collection('leave_requests').add({
+                      'crewName': name,
+                      'startDate': startDateController.text,
+                      'endDate': endDateController.text,
+                      'reason': reason,
+                      'status': 'Pending',
+                      'createdAt': Timestamp.now(),
+                    });
+
+                    messenger.showSnackBar(const SnackBar(content: Text('Leave request submitted successfully'), backgroundColor: Colors.deepPurple));
+                    startDateController.clear();
+                    endDateController.clear();
+                    reasonController.clear();
+                    setState(() { startDate = null; endDate = null; });
+                  },
+                  child: const Text('Submit Leave Request'),
                 ),
-                onPressed: () async {
-                  final name = nameController.text.trim();
-                  final date = dateController.text.trim();
-                  final reason = reasonController.text.trim();
-                  final messenger = ScaffoldMessenger.of(context);
-
-                  if (name.isEmpty || date.isEmpty || reason.isEmpty) {
-                    messenger.showSnackBar(
-                      const SnackBar(
-                        content: Text('Please fill all fields'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                    return;
-                  }
-
-                  await FirebaseFirestore.instance.collection('leave_requests').add({
-                    'crewName': name,
-                    'leaveDate': date,
-                    'reason': reason,
-                    'status': 'Pending',
-                  });
-
-                  messenger.showSnackBar(
-                    const SnackBar(
-                      content: Text('Leave request saved to Firestore'),
-                      backgroundColor: Colors.deepPurple,
-                    ),
-                  );
-
-                  dateController.clear();
-                  reasonController.clear();
-                },
-                child: const Text('Submit Leave Request'),
               ),
             ],
           ),
@@ -720,17 +763,30 @@ class NotificationsPage extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             itemCount: notifications.length,
             itemBuilder: (context, index) {
-              final data =
-              notifications[index].data() as Map<String, dynamic>;
+              final doc = notifications[index];
+              final data = doc.data() as Map<String, dynamic>;
+              final isRead = data['read'] == true;
 
               return Card(
-                child: ListTile(
-                  leading: const Icon(
-                    Icons.notifications,
-                    color: Colors.deepPurple,
+                color: isRead ? Colors.grey.shade100 : Colors.deepPurple.shade50,
+                child: InkWell(
+                  onTap: () async {
+                    if (!isRead) {
+                      await FirebaseFirestore.instance
+                          .collection('notifications')
+                          .doc(doc.id)
+                          .update({'read': true});
+                    }
+                  },
+                  child: ListTile(
+                    leading: Icon(
+                      isRead ? Icons.notifications_none : Icons.notifications_active,
+                      color: isRead ? Colors.grey : Colors.deepPurple,
+                    ),
+                    title: Text(data['title'] ?? 'No Title', style: TextStyle(fontWeight: isRead ? FontWeight.normal : FontWeight.bold)),
+                    subtitle: Text(data['message'] ?? 'No Message'),
+                    trailing: isRead ? const Text('Read', style: TextStyle(color: Colors.grey, fontSize: 12)) : null,
                   ),
-                  title: Text(data['title'] ?? 'No Title'),
-                  subtitle: Text(data['message'] ?? 'No Message'),
                 ),
               );
             },
@@ -866,79 +922,142 @@ class _WellnessPageState extends State<WellnessPage> {
   }
 }
 
-class ProfilePage extends StatelessWidget {
+class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
+  @override
+  State<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends State<ProfilePage> {
+  final phoneController = TextEditingController();
+  final baseController = TextEditingController();
+
+  @override
+  void dispose() {
+    phoneController.dispose();
+    baseController.dispose();
+    super.dispose();
+  }
+
+  void _showEditDialog(BuildContext context, String uid, String currentPhone, String currentBase) {
+    phoneController.text = currentPhone;
+    baseController.text = currentBase;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit Profile'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: phoneController, decoration: const InputDecoration(labelText: 'Phone Number', prefixIcon: Icon(Icons.phone))),
+            const SizedBox(height: 12),
+            TextField(controller: baseController, decoration: const InputDecoration(labelText: 'Base Location', prefixIcon: Icon(Icons.location_on))),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple, foregroundColor: Colors.white),
+            onPressed: () async {
+              await FirebaseFirestore.instance.collection('crew').doc(uid).update({
+                'phone': phoneController.text.trim(),
+                'base': baseController.text.trim(),
+              });
+              if (ctx.mounted) Navigator.pop(ctx);
+              setState(() {});
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text('Profile'),
-          backgroundColor: Colors.deepPurple,
-          foregroundColor: Colors.white,
-        ),
+        appBar: AppBar(title: const Text('Profile'), backgroundColor: Colors.deepPurple, foregroundColor: Colors.white),
         body: const Center(child: Text('No crew member logged in.')),
       );
     }
-
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Profile'),
-        backgroundColor: Colors.deepPurple,
-        foregroundColor: Colors.white,
-      ),
+      appBar: AppBar(title: const Text('Profile'), backgroundColor: Colors.deepPurple, foregroundColor: Colors.white),
       body: FutureBuilder<DocumentSnapshot>(
         future: FirebaseFirestore.instance.collection('crew').doc(user.uid).get(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+          if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
           String name = user.email ?? 'Unknown';
           String role = 'Crew';
-          String crewId = user.uid.substring(0, 6).toUpperCase();
+          String phone = '';
+          String base = '';
+          final crewId = user.uid.length >= 6 ? user.uid.substring(0, 6).toUpperCase() : user.uid;
           if (snapshot.hasData && snapshot.data!.exists) {
             final data = snapshot.data!.data() as Map<String, dynamic>;
             name = data['name'] ?? name;
             role = data['role'] ?? role;
+            phone = data['phone'] ?? '';
+            base = data['base'] ?? '';
           } else {
-            name = 'Admin';
-            role = 'Administrator';
+            name = 'Admin'; role = 'Administrator';
           }
-          return Padding(
+          return SingleChildScrollView(
             padding: const EdgeInsets.all(20),
             child: Column(
               children: [
-                const CircleAvatar(radius: 50, child: Icon(Icons.person, size: 50)),
+                Stack(
+                  children: [
+                    CircleAvatar(
+                      radius: 50,
+                      backgroundColor: Colors.deepPurple.shade100,
+                      child: const Icon(Icons.person, size: 50, color: Colors.deepPurple),
+                    ),
+                    Positioned(
+                      bottom: 0, right: 0,
+                      child: InkWell(
+                        onTap: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Picture upload: Tap to select image (requires image_picker plugin)'))),
+                        child: const CircleAvatar(radius: 16, backgroundColor: Colors.deepPurple, child: Icon(Icons.camera_alt, size: 16, color: Colors.white)),
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 20),
-                Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.badge),
-                    title: const Text('Crew ID'),
-                    subtitle: Text(crewId),
-                  ),
+                Card(child: ListTile(leading: const Icon(Icons.badge), title: const Text('Crew ID'), subtitle: Text(crewId))),
+                Card(child: ListTile(leading: const Icon(Icons.person), title: const Text('Name'), subtitle: Text(name))),
+                Card(child: ListTile(leading: const Icon(Icons.email), title: const Text('Email'), subtitle: Text(user.email ?? ''))),
+                Card(child: ListTile(leading: const Icon(Icons.work), title: const Text('Role'), subtitle: Text(role))),
+                Card(child: ListTile(leading: const Icon(Icons.phone), title: const Text('Phone'), subtitle: Text(phone.isEmpty ? 'Not set' : phone))),
+                Card(child: ListTile(leading: const Icon(Icons.location_on), title: const Text('Base Location'), subtitle: Text(base.isEmpty ? 'Not set' : base))),
+                const SizedBox(height: 10),
+                // Total flight hours
+                FutureBuilder<QuerySnapshot>(
+                  future: FirebaseFirestore.instance
+                      .collection('assignments')
+                      .where('crewName', isEqualTo: name)
+                      .where('status', isEqualTo: 'Completed')
+                      .get(),
+                  builder: (ctx, assignSnap) {
+                    final hours = (assignSnap.data?.docs.length ?? 0) * 2; // estimate 2h per flight
+                    final overLimit = hours > 100;
+                    return Card(
+                      color: overLimit ? Colors.red.shade50 : null,
+                      child: ListTile(
+                        leading: Icon(Icons.timer, color: overLimit ? Colors.red : Colors.deepPurple),
+                        title: Text('Total Flight Hours (Completed)', style: TextStyle(color: overLimit ? Colors.red : null)),
+                        subtitle: Text('$hours hrs (${assignSnap.data?.docs.length ?? 0} flights × 2h)'),
+                        trailing: overLimit ? const Icon(Icons.warning, color: Colors.red) : null,
+                      ),
+                    );
+                  },
                 ),
-                Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.person),
-                    title: const Text('Name'),
-                    subtitle: Text(name),
-                  ),
-                ),
-                Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.email),
-                    title: const Text('Email'),
-                    subtitle: Text(user.email ?? ''),
-                  ),
-                ),
-                Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.work),
-                    title: const Text('Role'),
-                    subtitle: Text(role),
-                  ),
+
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.edit),
+                  label: const Text('Edit Profile'),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple, foregroundColor: Colors.white),
+                  onPressed: () => _showEditDialog(context, user.uid, phone, base),
                 ),
               ],
             ),
@@ -947,6 +1066,8 @@ class ProfilePage extends StatelessWidget {
       ),
     );
   }
+
+  bool _hoursWarningCheck(AsyncSnapshot snapshot) => false;
 }
 
 class AdminDashboardPage extends StatelessWidget {
@@ -1020,75 +1141,86 @@ class AdminDashboardPage extends StatelessWidget {
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: statCard(
-                    'Crew',
-                    FirebaseFirestore.instance.collection('crew').snapshots(),
+      body: Column(
+        children: [
+          // Emergency SOS Banner
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('emergency_alerts')
+                .where('status', isEqualTo: 'Pending')
+                .snapshots(),
+            builder: (context, snap) {
+              if (snap.hasData && snap.data!.docs.isNotEmpty) {
+                final alert = snap.data!.docs.first.data() as Map<String, dynamic>;
+                return Container(
+                  color: Colors.red,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.warning, color: Colors.white),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'SOS Alert from ${alert['crewName']}: ${alert['message']}',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminEmergencyAlertsPage())),
+                        child: const Text('View', style: TextStyle(color: Colors.white)),
+                      ),
+                    ],
                   ),
-                ),
-                Expanded(
-                  child: statCard(
-                    'Flights',
-                    FirebaseFirestore.instance.collection('flights').snapshots(),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 15),
-            Expanded(
-              child: GridView.count(
-                crossAxisCount: 2,
-                crossAxisSpacing: 15,
-                mainAxisSpacing: 15,
+                );
+              }
+              return const SizedBox.shrink();
+            },
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
                 children: [
-                  adminCard(context, Icons.add, 'Add Flight', const AddFlightPage()),
-                  adminCard(context, Icons.check_circle, 'Approve Leave',
-                      const ApproveLeavePage()),
-                  adminCard(context, Icons.favorite, 'Wellness Reports',
-                      const AdminWellnessReportPage()),
-                  adminCard(context, Icons.people, 'Manage Crew',
-                      const ManageCrewPage()),
-                  adminCard(
-                    context,
-                    Icons.notifications,
-                    'Notifications',
-                    const NotificationsPage(),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: statCard(
+                          'Crew',
+                          FirebaseFirestore.instance.collection('crew').snapshots(),
+                        ),
+                      ),
+                      Expanded(
+                        child: statCard(
+                          'Flights',
+                          FirebaseFirestore.instance.collection('flights').snapshots(),
+                        ),
+                      ),
+                    ],
                   ),
-                  adminCard(
-                    context,
-                    Icons.assignment,
-                    'Assign Flight',
-                    const AssignFlightPage(),
-                  ),
-                  adminCard(
-                    context,
-                    Icons.assignment,
-                    'My Assigned Flights',
-                    const MyAssignedFlightsPage(),
-                  ),
-                  adminCard(
-                    context,
-                    Icons.update,
-                    'Update Flight Status',
-                    const UpdateFlightStatusPage(),
-                  ),
-                  adminCard(
-                    context,
-                    Icons.warning,
-                    'Emergency Alerts',
-                    const AdminEmergencyAlertsPage(),
+                  const SizedBox(height: 15),
+                  Expanded(
+                    child: GridView.count(
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 15,
+                      mainAxisSpacing: 15,
+                      children: [
+                        adminCard(context, Icons.add, 'Add Flight', const AddFlightPage()),
+                        adminCard(context, Icons.check_circle, 'Approve Leave', const ApproveLeavePage()),
+                        adminCard(context, Icons.favorite, 'Wellness Reports', const AdminWellnessReportPage()),
+                        adminCard(context, Icons.people, 'Manage Crew', const ManageCrewPage()),
+                        adminCard(context, Icons.notifications, 'Notifications', const NotificationsPage()),
+                        adminCard(context, Icons.assignment, 'Assign Flight', const AssignFlightPage()),
+                        adminCard(context, Icons.assignment, 'My Assigned Flights', const MyAssignedFlightsPage()),
+                        adminCard(context, Icons.update, 'Update Flight Status', const UpdateFlightStatusPage()),
+                        adminCard(context, Icons.warning, 'Emergency Alerts', const AdminEmergencyAlertsPage()),
+                      ],
+                    ),
                   ),
                 ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -1123,13 +1255,30 @@ class _AddFlightPageState extends State<AddFlightPage> {
     final status = statusController.text.trim();
     final messenger = ScaffoldMessenger.of(context);
 
-    if (flightNo.isEmpty || route.isEmpty || time.isEmpty || status.isEmpty) {
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Please fill all flight details'),
-          backgroundColor: Colors.red,
-        ),
-      );
+    if (flightNo.isEmpty) {
+      messenger.showSnackBar(const SnackBar(content: Text('Please enter Flight Number')));
+      return;
+    }
+    if (route.isEmpty) {
+      messenger.showSnackBar(const SnackBar(content: Text('Please enter Route')));
+      return;
+    }
+    if (time.isEmpty) {
+      messenger.showSnackBar(const SnackBar(content: Text('Please select Date and Time')));
+      return;
+    }
+    if (status.isEmpty) {
+      messenger.showSnackBar(const SnackBar(content: Text('Please enter Status')));
+      return;
+    }
+
+    final duplicateCheck = await FirebaseFirestore.instance
+        .collection('flights')
+        .where('flightNo', isEqualTo: flightNo)
+        .get();
+
+    if (duplicateCheck.docs.isNotEmpty) {
+      messenger.showSnackBar(const SnackBar(content: Text('Flight Number already exists')));
       return;
     }
     await FirebaseFirestore.instance.collection('flights').add({
@@ -1185,6 +1334,26 @@ class _AddFlightPageState extends State<AddFlightPage> {
               const SizedBox(height: 15),
               TextField(
                 controller: timeController,
+                readOnly: true,
+                onTap: () async {
+                  final date = await showDatePicker(
+                    context: context,
+                    initialDate: DateTime.now(),
+                    firstDate: DateTime.now(),
+                    lastDate: DateTime(2100),
+                  );
+                  if (date != null && context.mounted) {
+                    final time = await showTimePicker(
+                      context: context,
+                      initialTime: TimeOfDay.now(),
+                    );
+                    if (time != null && context.mounted) {
+                      setState(() {
+                        timeController.text = '${date.toString().split(' ')[0]} ${time.format(context)}';
+                      });
+                    }
+                  }
+                },
                 decoration: const InputDecoration(
                   labelText: 'Time',
                   prefixIcon: Icon(Icons.access_time),
@@ -1448,14 +1617,30 @@ class AssignFlightPage extends StatefulWidget {
 }
 
 class _AssignFlightPageState extends State<AssignFlightPage> {
-  final crewController = TextEditingController();
   final flightController = TextEditingController();
   final routeController = TextEditingController();
   final dateController = TextEditingController();
+  String? selectedCrewName;
+  List<String> crewNames = [];
+  bool loadingCrew = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCrewNames();
+  }
+
+  Future<void> _loadCrewNames() async {
+    final snap = await FirebaseFirestore.instance.collection('crew').get();
+    final names = snap.docs.map((d) => (d.data()['name'] ?? '') as String).where((n) => n.isNotEmpty).toList();
+    setState(() {
+      crewNames = names;
+      loadingCrew = false;
+    });
+  }
 
   @override
   void dispose() {
-    crewController.dispose();
     flightController.dispose();
     routeController.dispose();
     dateController.dispose();
@@ -1463,19 +1648,30 @@ class _AssignFlightPageState extends State<AssignFlightPage> {
   }
 
   Future<void> assignFlight() async {
-    final crew = crewController.text.trim();
+    final crew = selectedCrewName ?? '';
     final flight = flightController.text.trim();
     final route = routeController.text.trim();
     final date = dateController.text.trim();
     final messenger = ScaffoldMessenger.of(context);
 
     if (crew.isEmpty || flight.isEmpty || route.isEmpty || date.isEmpty) {
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Please fill all details'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      messenger.showSnackBar(const SnackBar(content: Text('Please fill all details'), backgroundColor: Colors.red));
+      return;
+    }
+
+    // Conflict check: same crew on same date
+    final conflict = await FirebaseFirestore.instance
+        .collection('assignments')
+        .where('crewName', isEqualTo: crew)
+        .where('date', isEqualTo: date)
+        .where('status', isEqualTo: 'Assigned')
+        .get();
+
+    if (conflict.docs.isNotEmpty) {
+      messenger.showSnackBar(SnackBar(
+        content: Text('Conflict: $crew is already assigned a flight on $date'),
+        backgroundColor: Colors.orange,
+      ));
       return;
     }
 
@@ -1487,19 +1683,23 @@ class _AssignFlightPageState extends State<AssignFlightPage> {
       'status': 'Assigned',
     });
 
+    // Write notification for assigned crew
+    await FirebaseFirestore.instance.collection('notifications').add({
+      'title': 'Flight Assigned',
+      'message': 'You have been assigned Flight $flight on $date (Route: $route)',
+      'targetCrew': crew,
+      'read': false,
+      'createdAt': Timestamp.now(),
+    });
+
     final query = await FirebaseFirestore.instance.collection('crew').where('name', isEqualTo: crew).get();
     for (var doc in query.docs) {
       await doc.reference.update({'flight': flight});
     }
 
-    messenger.showSnackBar(
-      const SnackBar(
-        content: Text('Flight Assigned Successfully'),
-        backgroundColor: Colors.deepPurple,
-      ),
-    );
+    messenger.showSnackBar(const SnackBar(content: Text('Flight Assigned Successfully'), backgroundColor: Colors.deepPurple));
 
-    crewController.clear();
+    setState(() { selectedCrewName = null; });
     flightController.clear();
     routeController.clear();
     dateController.clear();
@@ -1518,14 +1718,18 @@ class _AssignFlightPageState extends State<AssignFlightPage> {
         child: SingleChildScrollView(
           child: Column(
             children: [
-              TextField(
-                controller: crewController,
-                decoration: const InputDecoration(
-                  labelText: 'Crew Name',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.person),
-                ),
-              ),
+              loadingCrew
+                ? const CircularProgressIndicator()
+                : DropdownButtonFormField<String>(
+                    value: selectedCrewName,
+                    decoration: const InputDecoration(
+                      labelText: 'Select Crew Member',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.person),
+                    ),
+                    items: crewNames.map((n) => DropdownMenuItem(value: n, child: Text(n))).toList(),
+                    onChanged: (val) => setState(() => selectedCrewName = val),
+                  ),
               const SizedBox(height: 15),
               TextField(
                 controller: flightController,
@@ -1547,6 +1751,20 @@ class _AssignFlightPageState extends State<AssignFlightPage> {
               const SizedBox(height: 15),
               TextField(
                 controller: dateController,
+                readOnly: true,
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: DateTime.now(),
+                    firstDate: DateTime.now(),
+                    lastDate: DateTime(2100),
+                  );
+                  if (picked != null) {
+                    setState(() {
+                      dateController.text = picked.toString().split(' ')[0];
+                    });
+                  }
+                },
                 decoration: const InputDecoration(
                   labelText: 'Date',
                   border: OutlineInputBorder(),
@@ -1554,13 +1772,16 @@ class _AssignFlightPageState extends State<AssignFlightPage> {
                 ),
               ),
               const SizedBox(height: 20),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.deepPurple,
-                  foregroundColor: Colors.white,
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.deepPurple,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: assignFlight,
+                  child: const Text('Assign Flight'),
                 ),
-                onPressed: assignFlight,
-                child: const Text('Assign Flight'),
               ),
             ],
           ),
@@ -1575,47 +1796,58 @@ class MyAssignedFlightsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
     return Scaffold(
       appBar: AppBar(
         title: const Text('My Assigned Flights'),
         backgroundColor: Colors.deepPurple,
         foregroundColor: Colors.white,
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('assignments')
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          }
-
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          final flights = snapshot.data!.docs;
-
-          if (flights.isEmpty) {
-            return const Center(child: Text('No assigned flights found'));
-          }
-
-          return ListView.builder(
-            itemCount: flights.length,
-            itemBuilder: (context, index) {
-              final data = flights[index].data() as Map<String, dynamic>;
-
-              return Card(
-                margin: const EdgeInsets.all(10),
-                child: ListTile(
-                  leading: const Icon(Icons.flight),
-                  title: Text(data['flightNo'] ?? ''),
-                  subtitle: Text(
-                    'Crew: ${data['crewName']}\n'
-                        'Route: ${data['route']}\n'
-                        'Date: ${data['date']}',
-                  ),
-                ),
+      body: FutureBuilder<DocumentSnapshot>(
+        future: user != null
+            ? FirebaseFirestore.instance.collection('crew').doc(user.uid).get()
+            : Future.value(null as DocumentSnapshot?),
+        builder: (context, userSnap) {
+          final crewName = (userSnap.hasData && userSnap.data != null && userSnap.data!.exists)
+              ? ((userSnap.data!.data() as Map<String, dynamic>)['name'] ?? '') as String
+              : (user?.email ?? '');
+          return StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('assignments')
+                .where('crewName', isEqualTo: crewName)
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) return Center(child: Text('Error: ${snapshot.error}'));
+              if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+              final flights = snapshot.data!.docs;
+              if (flights.isEmpty) return const Center(child: Text('No assigned flights found'));
+              return ListView.builder(
+                itemCount: flights.length,
+                itemBuilder: (context, index) {
+                  final doc = flights[index];
+                  final data = doc.data() as Map<String, dynamic>;
+                  final isDone = data['status'] == 'Completed';
+                  return Card(
+                    margin: const EdgeInsets.all(10),
+                    child: ListTile(
+                      leading: Icon(Icons.flight, color: isDone ? Colors.green : Colors.deepPurple),
+                      title: Text(data['flightNo'] ?? ''),
+                      subtitle: Text('Route: ${data['route']}\nDate: ${data['date']}\nStatus: ${data['status']}'),
+                      trailing: isDone
+                          ? const Icon(Icons.check_circle, color: Colors.green)
+                          : ElevatedButton(
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple, foregroundColor: Colors.white),
+                              onPressed: () async {
+                                await FirebaseFirestore.instance.collection('assignments').doc(doc.id).update({'status': 'Completed'});
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Marked as Completed'), backgroundColor: Colors.green));
+                                }
+                              },
+                              child: const Text('Mark Completed'),
+                            ),
+                    ),
+                  );
+                },
               );
             },
           );
@@ -1704,45 +1936,46 @@ class UpdateFlightStatusPage extends StatelessWidget {
 class EmergencyAlertPage extends StatelessWidget {
   const EmergencyAlertPage({super.key});
 
-  Future<void> sendAlert(BuildContext context, String type) async {
+  Future<void> sendSosAlert(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirm SOS Alert', style: TextStyle(color: Colors.red)),
+        content: const Text('Are you sure you want to send an SOS Emergency Alert? This will immediately notify all admins.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Confirm SOS'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+    if (!context.mounted) return;
+
     final user = FirebaseAuth.instance.currentUser;
     final messenger = ScaffoldMessenger.of(context);
     String name = 'Unknown Crew';
     if (user != null) {
       final doc = await FirebaseFirestore.instance.collection('crew').doc(user.uid).get();
-      if (doc.exists) {
-        final data = doc.data() as Map<String, dynamic>;
-        name = data['name'] ?? name;
-      } else {
-        name = user.email ?? name;
-      }
+      if (doc.exists) name = (doc.data() as Map<String, dynamic>)['name'] ?? name;
+      else name = user.email ?? name;
     }
 
     await FirebaseFirestore.instance.collection('emergency_alerts').add({
       'crewName': name,
-      'alertType': type,
-      'message': '$type reported by crew',
+      'alertType': 'SOS',
+      'message': 'SOS Emergency Alert reported by $name',
       'status': 'Pending',
       'createdAt': Timestamp.now(),
     });
 
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text('$type alert sent successfully'),
-        backgroundColor: Colors.red,
-      ),
-    );
-  }
-
-  Widget alertButton(BuildContext context, IconData icon, String title) {
-    return Card(
-      child: ListTile(
-        leading: Icon(icon, color: Colors.red),
-        title: Text(title),
-        trailing: const Icon(Icons.arrow_forward_ios),
-        onTap: () => sendAlert(context, title),
-      ),
-    );
+    if (context.mounted) {
+      messenger.showSnackBar(const SnackBar(content: Text('SOS Alert sent to Admin!'), backgroundColor: Colors.red));
+    }
   }
 
   @override
@@ -1753,14 +1986,39 @@ class EmergencyAlertPage extends StatelessWidget {
         backgroundColor: Colors.red,
         foregroundColor: Colors.white,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            alertButton(context, Icons.medical_services, 'Medical Emergency'),
-            alertButton(context, Icons.flight_land, 'Flight Delay'),
-            alertButton(context, Icons.groups, 'Crew Issue'),
-          ],
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(30),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.warning_amber_rounded, size: 100, color: Colors.red),
+              const SizedBox(height: 20),
+              const Text('Press the SOS button below in case of an emergency.', textAlign: TextAlign.center, style: TextStyle(fontSize: 16)),
+              const SizedBox(height: 40),
+              SizedBox(
+                width: 200,
+                height: 200,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                    shape: const CircleBorder(),
+                    elevation: 12,
+                  ),
+                  onPressed: () => sendSosAlert(context),
+                  child: const Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.sos, size: 60),
+                      SizedBox(height: 8),
+                      Text('SOS', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

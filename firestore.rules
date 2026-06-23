@@ -1,0 +1,57 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Crew can only read/write their own profile
+    match /crew/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Only authenticated users can read flights
+    match /flights/{flightId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null; // Admin-only in production
+    }
+
+    // Only authenticated users can read/write assignments
+    match /assignments/{assignmentId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+
+    // Crew can submit leave requests; only auth users can read
+    match /leave_requests/{leaveId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth != null;
+    }
+
+    // Notifications: auth users can read, write
+    match /notifications/{notifId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Emergency alerts: auth users can create; read all
+    match /emergency_alerts/{alertId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null; // Admin resolves
+    }
+
+    // Rest time checks
+    match /rest_time_checks/{checkId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Wellness reports
+    match /wellness_reports/{reportId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Deny everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
